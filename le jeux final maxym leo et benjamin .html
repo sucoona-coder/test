@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La Sucoona Game - Éditeur Scratch</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.11/dist/interact.min.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap');
+
+        /* --- Animations --- */
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        @keyframes float {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0); }
+        }
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* --- Base --- */
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #0f172a;
+            overflow: hidden;
+            color: white;
+            margin: 0;
+            user-select: none;
+        }
+        #ui-wrapper { display: flex; width: 100vw; height: 100vh; position: relative; }
+        #start-screen {
+            position: fixed; inset: 0; z-index: 2000;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .menu-card {
+            background: rgba(30, 41, 59, 0.5);
+            backdrop-filter: blur(20px);
+            padding: 3rem; border-radius: 3rem;
+            border: 1px solid rgba(255,255,255,0.1);
+            text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 90%;
+        }
+        #sidebar {
+            width: 340px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex; flex-direction: column; z-index: 50;
+            padding: 20px;
+        }
+        #viewport {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(-45deg, #0f172a, #1e293b, #3b82f6, #1e293b);
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
+        }
+        .btn {
+            padding: 12px; border-radius: 14px; font-weight: bold;
+            cursor: pointer; text-align: center; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            border: none;
+        }
+        .btn-blue { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; }
+        .btn-gray { background: rgba(255,255,255,0.07); color: #94a3b8; }
+        .btn-gray.active { background: #3b82f6; color: white; }
+        .btn-green { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; }
+        .btn-red { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; }
+        .btn-orange { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: white; }
+        #grid-bg {
+            position: absolute; top: -3000px; left: -3000px; width: 6000px; height: 6000px;
+            background-image: linear-gradient(rgba(59, 130, 246, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
+            background-size: 60px 60px; pointer-events: none; z-index: 0;
+        }
+        .tile-tool {
+            width: 55px; height: 55px; border-radius: 16px; cursor: grab;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);
+            font-size: 1.6rem; transition: all 0.2s;
+        }
+        .tile-tool:hover {
+            transform: scale(1.1);
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+        .panel {
+            position: absolute; width: 340px; background: rgba(15, 23, 42, 0.98);
+            backdrop-filter: blur(25px); border: 1px solid rgba(96, 165, 250, 0.4);
+            border-radius: 24px; z-index: 100; display: none;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+        }
+        .panel.open { display: block; }
+        .panel-header {
+            padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.05);
+            cursor: grab; display: flex; justify-content: space-between; align-items: center;
+        }
+        input, textarea, select {
+            width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+            padding: 10px; border-radius: 10px; color: white; font-size: 0.9rem;
+        }
+        label {
+            font-size: 0.7rem; text-transform: uppercase; font-weight: 900;
+            color: #64748b; margin-bottom: 4px; display: block;
+        }
+        .emoji-grid {
+            display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px;
+            max-height: 200px; overflow-y: auto; padding: 10px; background: rgba(0,0,0,0.2);
+            border-radius: 10px; margin-top: 5px;
+        }
+        .emoji-item {
+            cursor: pointer; text-align: center; padding: 5px; border-radius: 5px;
+            font-size: 1.4rem; transition: transform 0.1s, background 0.1s;
+        }
+        .emoji-item:hover {
+            transform: scale(1.3);
+            background: rgba(255,255,255,0.15);
+        }
+        #dice-result.rolling { animation: rotate 0.5s linear infinite; }
+
+        /* --- Éditeur Scratch --- */
+        #scratch-editor {
+            width: 90%;
+            max-width: 900px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 0 auto;
+        }
+        #block-palette {
+            width: 200px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 10px;
+            overflow-y: auto;
+            max-height: 500px;
+        }
+        #block-workspace {
+            flex-grow: 1;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-left: 20px;
+            min-height: 500px;
+        }
+        .block-category {
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        }
+        .block-category h4 {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+        .block {
+            background: rgba(59, 130, 246, 0.2);
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            cursor: grab;
+            font-size: 0.8rem;
+            border-left: 4px solid #3b82f6;
+            user-select: none;
+            transition: all 0.1s;
+        }
+        .block:hover {
+            background: rgba(59, 130, 246, 0.3);
+            transform: scale(1.02);
+        }
+        .block-dragged {
+            background: rgba(59, 130, 246, 0.4);
+            border: 2px dashed rgba(59, 130, 246, 0.6);
+            min-height: 40px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            cursor: move;
+        }
+        .block-code {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .tab-buttons {
+            display: flex;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 15px;
+            width: fit-content;
+        }
+        .tab-button {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab-button.active {
+            background: rgba(59, 130, 246, 0.3);
+            color: white;
+        }
+        .tab-button:not(.active) {
+            color: #94a3b8;
+        }
+        .tab-button:not(.active):hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div id="youtube-player-container"><div id="yt-player"></div></div>
+
+    <div id="start-screen">
+        <div class="menu-card">
+            <h1 class="text-6xl font-black mb-2 tracking-tighter italic text-white">LA <span class="text-blue-500">SUCOONA</span> GAME</h1>
+            <p class="text-slate-400 mb-12 tracking-widest text-xs font-bold uppercase">ÉDITEUR SCRATCH</p>
+            <button onclick="startGame()" class="btn btn-blue w-64 mx-auto py-5 text-xl font-black rounded-2xl shadow-lg hover:shadow-xl transition-all">LANCER LE JEU</button>
+        </div>
+    </div>
+
+    <div id="ui-wrapper">
+        <button id="fs-toggle" title="Plein Écran" class="fixed top-4 right-4 z-50 btn btn-gray p-2 rounded-full w-10 h-10">⛶</button>
+
+        <div id="sidebar">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-xl font-black tracking-tighter">SUCOONA <span class="text-blue-500">PRO</span></h1>
+                <div class="flex gap-2">
+                    <button onclick="openSavePanel()" class="text-slate-500 hover:text-white text-[10px] uppercase font-bold transition-colors">💾 Sauvegardes</button>
+                    <button onclick="showStartScreen()" class="text-slate-500 hover:text-white text-[10px] uppercase font-bold transition-colors">Quitter 🏠</button>
+                </div>
+            </div>
+
+            <div class="flex gap-2 mb-6 bg-black/40 p-1 rounded-2xl">
+                <button onclick="switchTab('play')" id="tab-play" class="btn btn-gray active flex-1 text-[10px] uppercase font-black transition-all">Partie</button>
+                <button onclick="switchTab('edit')" id="tab-edit" class="btn btn-gray flex-1 text-[10px] uppercase font-black transition-all">Éditeur</button>
+                <button onclick="switchTab('audio')" id="tab-audio" class="btn btn-gray flex-1 text-[10px] uppercase font-black transition-all">Musique</button>
+            </div>
+
+            <!-- Onglet Jeu -->
+            <div id="panel-play" class="flex-grow flex flex-col">
+                <div id="player-list" class="space-y-3 mb-4 overflow-y-auto"></div>
+                <div class="mt-auto bg-slate-900/60 p-6 rounded-3xl border border-white/10 text-center">
+                    <div id="dice-result" class="text-7xl mb-4">🎲</div>
+                    <button id="roll-btn" class="btn btn-blue w-full py-4 text-xl font-black uppercase tracking-tighter transition-all hover:scale-105">Lancer le dé</button>
+                </div>
+            </div>
+
+            <!-- Onglet Audio -->
+            <div id="panel-audio" class="hidden flex-grow flex flex-col space-y-4">
+                <div class="bg-black/20 p-4 rounded-2xl space-y-3">
+                    <label>Ajouter Musique (YouTube ou MP3)</label>
+                    <input type="text" id="audio-url" placeholder="Lien Youtube ou .mp3" class="w-full p-3 bg-black/30 rounded-xl border border-white/10">
+                    <input type="text" id="audio-name" placeholder="Nom de la piste" class="w-full p-3 bg-black/30 rounded-xl border border-white/10">
+                    <button onclick="addAudio()" class="btn btn-blue w-full text-[10px] uppercase transition-all">Ajouter</button>
+                </div>
+                <div class="flex-grow overflow-y-auto pr-2" id="playlist-container"></div>
+                <div class="p-4 bg-slate-800/40 rounded-2xl">
+                    <label>Volume</label>
+                    <input type="range" id="audio-volume" min="0" max="100" value="50" oninput="setVolume(this.value)" class="w-full">
+                </div>
+            </div>
+
+            <!-- Onglet Édition -->
+            <div id="panel-edit" class="hidden flex-grow flex flex-col space-y-4 overflow-y-auto pr-2">
+                <div class="flex gap-2 mb-4">
+                    <button onclick="openEffectCreator()" class="btn btn-green flex-1 text-[10px] uppercase font-black transition-all">➕ Créer un effet</button>
+                    <button onclick="switchTab('custom')" id="tab-custom" class="btn btn-gray flex-1 text-[10px] uppercase font-black transition-all">Mes effets</button>
+                </div>
+
+                <!-- Onglet Édition Standard -->
+                <div id="standard-edit" class="flex-grow flex flex-col space-y-4">
+                    <div class="effect-category">
+                        <h4>Mouvement</h4>
+                        <div class="grid grid-cols-4 gap-2" id="movement-tiles"></div>
+                    </div>
+                    <div class="effect-category">
+                        <h4>Score</h4>
+                        <div class="grid grid-cols-4 gap-2" id="score-tiles"></div>
+                    </div>
+                    <div class="effect-category">
+                        <h4>Social</h4>
+                        <div class="grid grid-cols-4 gap-2" id="social-tiles"></div>
+                    </div>
+                    <div class="effect-category">
+                        <h4>Fun</h4>
+                        <div class="grid grid-cols-4 gap-2" id="fun-tiles"></div>
+                    </div>
+
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">Classiques :</p>
+                    <div class="grid grid-cols-4 gap-2">
+                        <div draggable="true" ondragstart="sd('NORMAL', '⚪', 'Neutre', 0, '', 0, 'none')" class="tile-tool" title="Case neutre">⚪</div>
+                        <div draggable="true" ondragstart="sd('BONUS', '⭐', 'Bonus', 50, '+50 points !', 0, 'none')" class="tile-tool" title="+50 points">⭐</div>
+                        <div draggable="true" ondragstart="sd('MALUS', '💀', 'Danger', -50, '-50 points.', 0, 'none')" class="tile-tool" title="-50 points">💀</div>
+                        <div draggable="true" ondragstart="sd('GOLD', '💰', 'Butin', 100, 'Incroyable !', 0, 'none')" class="tile-tool" title="+100 points">💰</div>
+                    </div>
+                </div>
+
+                <!-- Onglet Effets Personnalisés -->
+                <div id="custom-edit" class="hidden flex-grow flex flex-col space-y-4">
+                    <div id="custom-effects-list" class="space-y-2"></div>
+                </div>
+
+                <button onclick="addPlayer()" class="btn btn-gray w-full text-[10px] font-black py-3 uppercase mt-4 transition-all">+ Nouveau Joueur</button>
+            </div>
+        </div>
+
+        <div id="viewport" ondrop="handleDrop(event)" ondragover="event.preventDefault()">
+            <div id="grid-bg"></div>
+            <canvas id="gameCanvas" style="position: absolute; top:0; left:0;"></canvas>
+
+            <!-- Panneau de propriétés -->
+            <div id="prop-panel" class="panel">
+                <div class="panel-header" onmousedown="startDraggingPanel(event)">
+                    <h3 class="font-black text-blue-400 uppercase text-[10px]">Propriétés Case #<span id="prop-index-display">0</span></h3>
+                    <button onclick="closePropPanel()" class="text-white hover:text-red-400 transition-colors">✕</button>
+                </div>
+                <div id="prop-content" class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label>Nom</label>
+                            <input type="text" id="prop-name" oninput="updateTileData()" class="w-full p-3 bg-black/30 rounded-xl border border-white/10">
+                        </div>
+                        <div>
+                            <label>Points</label>
+                            <input type="number" id="prop-score" oninput="updateTileData()" class="w-full p-3 bg-black/30 rounded-xl border border-white/10">
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-500/5 p-3 rounded-xl border border-blue-500/20">
+                        <label class="text-blue-400">Action de déplacement</label>
+                        <select id="prop-move-type" onchange="updateTileData()" class="w-full p-3 mt-1 bg-black/30 rounded-xl border border-blue-500/30">
+                            <option value="none">Aucun</option>
+                            <option value="relative">Relatif (+/-)</option>
+                            <option value="absolute">Téléport (Index fixe)</option>
+                            <option value="reset">Départ</option>
+                        </select>
+                        <div id="move-val-container" class="mt-2 flex items-center gap-2 hidden">
+                            <label id="move-val-label" class="mb-0 text-[0.7rem]">Valeur :</label>
+                            <input type="number" id="prop-move-val" oninput="updateTileData()" class="w-20 p-2 bg-black/30 rounded-xl border border-white/10">
+                        </div>
+                    </div>
+
+                    <div class="bg-purple-500/5 p-3 rounded-xl border border-purple-500/20">
+                        <label class="text-purple-400">Effet spécial</label>
+                        <select id="prop-effect" onchange="updateTileData()" class="w-full p-3 mt-1 bg-black/30 rounded-xl border border-purple-500/30">
+                            <option value="">Aucun</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label>Visuel (Icône)</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="prop-icon" oninput="updateTileData()" class="flex-1 text-center text-xl p-3 bg-black/30 rounded-xl border border-white/10">
+                            <button onclick="document.getElementById('emoji-picker').classList.toggle('hidden')" class="btn btn-gray p-3">😊</button>
+                        </div>
+                        <div id="emoji-picker" class="space-y-3 hidden"></div>
+                    </div>
+
+                    <div>
+                        <label>Message d'arrêt</label>
+                        <textarea id="prop-desc" rows="2" oninput="updateTileData()" class="w-full p-3 bg-black/30 rounded-xl border border-white/10"></textarea>
+                    </div>
+
+                    <div class="pt-2 border-t border-white/5 flex gap-2">
+                        <button onclick="deleteSelectedTile()" class="flex-1 py-2 bg-red-500/10 text-red-400 rounded-xl text-[9px] uppercase border border-red-500/20 transition-all hover:bg-red-500/20">Supprimer</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Éditeur d'effets style Scratch -->
+            <div id="effect-creator" class="panel" style="width: 900px; left: calc(50% - 450px); top: 30px;">
+                <div class="panel-header" onmousedown="startDraggingPanel(event)">
+                    <h3 class="font-black text-green-400 uppercase text-[10px]">CRÉER UN EFFET SPÉCIAL</h3>
+                    <button onclick="closeEffectCreator()" class="text-white hover:text-red-400 transition-colors">✕</button>
+                </div>
+                <div class="p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+                    <div>
+                        <label>Nom de l'effet <span class="text-red-400">*</span></label>
+                        <input type="text" id="effect-name" placeholder="Ex: Super Bonus" class="w-full p-3 bg-black/30 rounded-xl border border-white/10">
+                    </div>
+
+                    <div>
+                        <label>Icône <span class="text-red-400">*</span></label>
+                        <div class="flex gap-2">
+                            <input type="text" id="effect-icon" placeholder="Ex: 🎉" class="flex-1 text-center text-2xl p-3 bg-black/30 rounded-xl border border-white/10">
+                            <button onclick="document.getElementById('effect-emoji-picker').classList.toggle('hidden')" class="btn btn-gray p-3">😊</button>
+                        </div>
+                        <div id="effect-emoji-picker" class="emoji-grid hidden mt-2"></div>
+                    </div>
+
+                    <div>
+                        <label>Description (optionnelle)</label>
+                        <textarea id="effect-desc" rows="2" placeholder="Ex: +100 points et changement de couleur !" class="w-full p-3 bg-black/30 rounded-xl border border-white/10"></textarea>
+                    </div>
+
+                    <!-- Onglets "Blocs" / "Code" -->
+                    <div class="tab-buttons">
+                        <button id="tab-blocks" class="tab-button active" onclick="switchEffectEditor('blocks')">Blocs</button>
+                        <button id="tab-code" class="tab-button" onclick="switchEffectEditor('code')">Code</button>
+                    </div>
+
+                    <!-- Mode Blocs (Scratch) -->
+                    <div id="block-editor" class="block-editor-mode">
+                        <div class="flex gap-4">
+                            <div id="block-palette">
+                                <div class="block-category">
+                                    <h4>Score</h4>
+                                    <div class="block" draggable="true" data-code="p.score += 10;">Ajouter 10 points</div>
+                                    <div class="block" draggable="true" data-code="p.score -= 10;">Retirer 10 points</div>
+                                    <div class="block" draggable="true" data-code="p.score *= 2;">Multiplier score par 2</div>
+                                    <div class="block" draggable="true" data-code="p.score = 0;">Réinitialiser score</div>
+                                    <div class="block" draggable="true" data-code="p.score += Math.floor(Math.random() * 50) + 10;">Ajouter 10-60 points aléatoires</div>
+                                </div>
+                                <div class="block-category">
+                                    <h4>Mouvement</h4>
+                                    <div class="block" draggable="true" data-code="finalIdx = Math.min(p.tileIdx + 3, S.tiles.length - 1);">Avancer de 3 cases</div>
+                                    <div class="block" draggable="true" data-code="finalIdx = Math.max(0, p.tileIdx - 2);">Reculer de 2 cases</div>
+                                    <div class="block" draggable="true" data-code="finalIdx = 0;">Retour au départ</div>
+                                    <div class="block" draggable="true" data-code="finalIdx = Math.floor(Math.random() * S.tiles.length);">Téléportation aléatoire</div>
+                                    <div class="block" draggable="true" data-code="finalIdx = Math.min(p.tileIdx + Math.floor(Math.random() * 6) + 1, S.tiles.length - 1);">Avancer d'un dé (1-6)</div>
+                                </div>
+                                <div class="block-category">
+                                    <h4>Couleur</h4>
+                                    <div class="block" draggable="true" data-code="p.color = '#FF0000';">Rouge</div>
+                                    <div class="block" draggable="true" data-code="p.color = '#00FF00';">Vert</div>
+                                    <div class="block" draggable="true" data-code="p.color = '#0000FF';">Bleu</div>
+                                    <div class="block" draggable="true" data-code="p.color = '#FFFF00';">Jaune</div>
+                                    <div class="block" draggable="true" data-code="p.color = 'hsl(' + Math.floor(Math.random()*360) + ', 70%, 50%)';">Couleur aléatoire</div>
+                                </div>
+                                <div class="block-category">
+                                    <h4>Effets Spéciaux</h4>
+                                    <div class="block" draggable="true" data-code="p.shield = true;">Ajouter un bouclier</div>
+                                    <div class="block" draggable="true" data-code="p.ghost = true;">Devenir fantôme</div>
+                                    <div class="block" draggable="true" data-code="p.slow = 2;">Ralentir (2 tours)</div>
+                                    <div class="block" draggable="true" data-code="msg += '\n🎉 Effet spécial !';">Message personnalisé</div>
+                                    <div class="block" draggable="true" data-code="p.score = S.players.reduce((max, player) => player.score > max ? player.score : max, 0);">Copier score du leader</div>
+                                </div>
+                                <div class="block-category">
+                                    <h4>Conditions</h4>
+                                    <div class="block" draggable="true" data-code="if (p.score > 100) { p.score += 50; msg += '\n🏆 Bonus de 50 points !'; }">Si score > 100, +50 pts</div>
+                                    <div class="block" draggable="true" data-code="if (Math.random() < 0.5) { p.score += 20; msg += '\n🍀 Chanceux ! +20 pts'; }">50% de chance +20 pts</div>
+                                    <div class="block" draggable="true" data-code="if (p.tileIdx % 2 === 0) { p.score += 10; msg += '\n🎲 Case paire ! +10 pts'; }">Si case paire, +10 pts</div>
+                                </div>
+                                <div class="block-category">
+                                    <h4>Boucles</h4>
+                                    <div class="block" draggable="true" data-code="for (let i = 0; i < 3; i++) { p.score += 5; }">Répéter 3 fois: +5 pts</div>
+                                    <div class="block" draggable="true" data-code="for (let i = 0; i < S.players.length; i++) { if (S.players[i] !== p) S.players[i].score -= 5; }">Retirer 5 pts à tous</div>
+                                </div>
+                                <div class="block-category">
+                                    <h4>Interactions</h4>
+                                    <div class="block" draggable="true" data-code="const otherPlayer = S.players[(S.turn + 1) % S.players.length]; [p.tileIdx, otherPlayer.tileIdx] = [otherPlayer.tileIdx, p.tileIdx]; msg += '\n🔀 Échange avec ' + otherPlayer.name;">Échanger de place</div>
+                                    <div class="block" draggable="true" data-code="const otherPlayer = S.players[(S.turn + 1) % S.players.length]; p.score += 10; otherPlayer.score -= 10; msg += '\n💸 Vol de 10 pts à ' + otherPlayer.name;">Voler 10 pts</div>
+                                </div>
+                            </div>
+
+                            <div id="block-workspace" ondrop="dropBlock(event)" ondragover="event.preventDefault()">
+                                <h4 class="text-[0.8rem] font-bold mb-2 text-slate-300">Zone de travail (glissez les blocs ici)</h4>
+                                <div id="block-container"></div>
+                                <div class="block-code" id="generated-code">// Votre code généré apparaîtra ici</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mode Code (JavaScript) -->
+                    <div id="code-editor" class="block-editor-mode hidden">
+                        <div>
+                            <label>Code JavaScript <span class="text-[0.6rem] text-slate-400">(utilise 'p' pour le joueur, 'S' pour l'état du jeu, 'msg' pour le message, 'finalIdx' pour la case de destination)</span></label>
+                            <textarea id="effect-custom-code" rows="10" placeholder="Ex:
+p.score += 50;
+p.color = '#FF0000';
+msg += '\n🎉 Effet spécial activé !';
+finalIdx = 10;" class="w-full p-3 bg-black/30 rounded-xl border border-white/10 font-mono text-sm"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="pt-2 border-t border-white/10 flex gap-2">
+                        <button onclick="testCustomEffect()" class="flex-1 btn btn-blue py-3 text-xs uppercase font-black transition-all">Tester l'effet</button>
+                        <button onclick="saveCustomEffect()" class="flex-1 btn btn-green py-3 text-xs uppercase font-black transition-all">Enregistrer</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panneau de sauvegarde -->
+            <div id="save-panel" class="panel" style="width: 400px; left: calc(50% - 200px); top: 100px;">
+                <div class="panel-header" onmousedown="startDraggingPanel(event)">
+                    <h3 class="font-black text-orange-400 uppercase text-[10px]">GESTION DES SAUVEGARDES</h3>
+                    <button onclick="closeSavePanel()" class="text-white hover:text-red-400 transition-colors">✕</button>
+                </div>
+                <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                    <div class="flex gap-2 mb-4">
+                        <button onclick="saveGame('map')" class="btn btn-blue flex-1 text-[10px] uppercase font-black transition-all">Sauvegarder la map</button>
+                        <button onclick="saveGame('full')" class="btn btn-green flex-1 text-[10px] uppercase font-black transition-all">Sauvegarder partie complète</button>
+                    </div>
+
+                    <div id="save-list" class="space-y-2"></div>
+
+                    <div class="pt-2 border-t border-white/5 flex gap-2">
+                        <input type="text" id="save-name" placeholder="Nom de la sauvegarde" class="flex-1 p-3 bg-black/30 rounded-xl border border-white/10">
+                        <button onclick="loadGame()" class="btn btn-blue py-2 text-[9px] uppercase font-black transition-all">Charger</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-overlay" class="fixed inset-0 bg-slate-950/90 backdrop-blur-xl hidden z-[3000] items-center justify-center p-6">
+            <div class="bg-slate-900 border border-blue-500/40 p-8 rounded-[40px] max-w-sm w-full text-center shadow-2xl">
+                <div id="modal-icon" class="text-7xl mb-4">🎁</div>
+                <h2 id="modal-title" class="text-2xl font-black mb-2 italic uppercase">Action</h2>
+                <p id="modal-desc" class="text-slate-400 text-sm mb-8 italic">...</p>
+                <button id="modal-btn" onclick="closeModal()" class="btn btn-blue w-full py-4 text-lg font-black transition-all hover:scale-105">CONTINUER</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+const EMOJIS = {
+    "Visages": ["😀","😃","😄","😁","😆","😅","🤣","😂","😊","😇","🙂","🙃","😉","😌","😍","🥰","😘","😗","😙","😚","😋","😛","😝","😜","🤪","🤨","🧐","🤓","😎","🥸","🤩","🥳","😏","😒","😞","😔","😟","😕","🙁","☹️","😣","😖","😫","😩","🥺","😢","😭","😤","😠","😡","🤬","🤯","😳","🥵","🥶","😱","😨","😰","😥","😓","🤗","🤔","🤭","🫢","🫣","🫤","🫥","😶","😐","😑","😬","🙄","😯","😦","😧","😮","🫨","😲","🥴","🤫","🤥","😪","😴","😌","🤤","😘","😗","😙","😚"],
+    "Animaux": ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐥","🐣","🐦","🦆","🦢","🦉","🦇","🐺","🦝","🦔","🦛","🐝","🐛","🦗","🕷️","🕸️","🦂","🐌","🦋","🐙","🦑","🦐","🦞","🦀","🐠","🐟","🐡","🦈","🐬","🐋","🐳","🦭","🐴","🦓","🦒","🦖","🦕","🦘","🦡","🐿️","🦦","🦨","🐾"]
+};
+
+const SPECIAL_TILE_TYPES = [
+    { type: 'MOVE', icon: '🚀', name: 'Boost', score: 0, desc: 'Avance de 3 cases !', moveVal: 3, moveType: 'relative', effect: null, category: 'movement' },
+    { type: 'MOVE', icon: '🕳️', name: 'Trou', score: 0, desc: 'Recule de 2 cases !', moveVal: -2, moveType: 'relative', effect: null, category: 'movement' },
+    { type: 'TELEPORT', icon: '🌀', name: 'Portail', score: 0, desc: 'Téléportation vers la case 5 !', moveVal: 5, moveType: 'absolute', effect: null, category: 'movement' },
+    { type: 'RESET', icon: '↩️', name: 'Reset', score: 0, desc: 'Retour à la case départ !', moveVal: 0, moveType: 'reset', effect: null, category: 'movement' },
+    { type: 'VORTEX', icon: '🌀', name: 'Tourbillon', score: 0, desc: 'Perds 1 tour !', moveVal: 0, moveType: 'none', effect: 'vortex', category: 'movement' },
+    { type: 'TURBO', icon: '🚗', name: 'Turbo', score: 0, desc: 'x2 le dé au prochain tour !', moveVal: 0, moveType: 'none', effect: 'turbo', category: 'movement' },
+    { type: 'SLOW', icon: '🐢', name: 'Ralentissement', score: 0, desc: '1/2 du dé pendant 2 tours.', moveVal: 0, moveType: 'none', effect: 'slow', category: 'movement' },
+    { type: 'REVERSE', icon: '🔄', name: 'Inversion', score: 0, desc: 'Recule du nombre de cases du dé.', moveVal: 0, moveType: 'none', effect: 'reverse', category: 'movement' },
+    { type: 'LUCKY', icon: '🍀', name: 'Block Chanceux', score: 0, desc: 'Doublez vos points !', moveVal: 0, moveType: 'none', effect: 'doubleScore', category: 'score' },
+    { type: 'JACKPOT', icon: '💰', name: 'Jackpot', score: 0, desc: '+100 points +10 par adversaire !', moveVal: 0, moveType: 'none', effect: 'jackpot', category: 'score' },
+    { type: 'BET', icon: '🎲', name: 'Pari', score: 0, desc: 'Misez 50% de vos points !', moveVal: 0, moveType: 'none', effect: 'bet', category: 'score' },
+    { type: 'CRASH', icon: '📉', name: 'Krash', score: 0, desc: '-30% de vos points !', moveVal: 0, moveType: 'none', effect: 'crash', category: 'score' },
+    { type: 'STEAL', icon: '💸', name: 'Vol', score: 0, desc: 'Volez 20 points à un adversaire !', moveVal: 0, moveType: 'none', effect: 'steal', category: 'score' },
+    { type: 'SWAP', icon: '🔀', name: 'Échange', score: 0, desc: 'Échangez de place avec un autre joueur !', moveVal: 0, moveType: 'none', effect: 'swapPlayer', category: 'social' },
+    { type: 'ALLIANCE', icon: '🤝', name: 'Alliance', score: 0, desc: '+50 points pour vous et un allié !', moveVal: 0, moveType: 'none', effect: 'alliance', category: 'social' },
+    { type: 'CAMELEON', icon: '🎭', name: 'Caméléon', score: 0, desc: 'Copiez la couleur et le score du leader !', moveVal: 0, moveType: 'none', effect: 'camouflage', category: 'social' },
+    { type: 'DUEL', icon: '⚔️', name: 'Duel', score: 0, desc: 'Défiez un adversaire au dé !', moveVal: 0, moveType: 'none', effect: 'duel', category: 'social' },
+    { type: 'USURPATION', icon: '👑', name: 'Usurpation', score: 0, desc: 'Prenez la place et le score d\'un adversaire !', moveVal: 0, moveType: 'none', effect: 'usurpation', category: 'social' },
+    { type: 'SHIELD', icon: '🛡️', name: 'Bouclier', score: 0, desc: 'Immunité au prochain malus !', moveVal: 0, moveType: 'none', effect: 'shield', category: 'fun' },
+    { type: 'GHOST', icon: '👻', name: 'Fantôme', score: 0, desc: 'Devenez invisible 1 tour !', moveVal: 0, moveType: 'none', effect: 'ghost', category: 'fun' },
+    { type: 'COLOR', icon: '🎨', name: 'Changement Couleur', score: 0, desc: 'Changez de couleur !', moveVal: 0, moveType: 'none', effect: 'changeColor', category: 'fun' },
+];
+
+const CUSTOM_EFFECTS = [];
+const SAVES = [];
+
+var canvas = document.getElementById('gameCanvas');
+var ctx = canvas.getContext('2d');
+var viewport = document.getElementById('viewport');
+var gridBg = document.getElementById('grid-bg');
+var propPanel = document.getElementById('prop-panel');
+var effectCreator = document.getElementById('effect-creator');
+var savePanel = document.getElementById('save-panel');
+var blockWorkspace = document.getElementById('block-workspace');
+var blockContainer = document.getElementById('block-container');
+var generatedCodeElement = document.getElementById('generated-code');
+
+var ytPlayer;
+var currentAudio = null;
+var currentAudioType = null;
+var currentEditorMode = 'blocks';
+
+var S = {
+    mode: 'play',
+    camera: { x: 0, y: 0, zoom: 0.8 },
+    tiles: [{ x: 0, y: 0, type: 'START', icon: '🏁', name: 'DÉPART', desc: 'Prêt pour la Sucoona ?', score: 0, moveType: 'none', moveVal: 0, effect: null }],
+    players: [{ id: 1, name: "Joueur 1", color: "#3b82f6", tileIdx: 0, x: 0, y: 0, score: 0, shield: false, ghost: false, slow: 0, bet: null }],
+    playlist: [
+        { id: 1, name: "Sucoona Vibes", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", type: "mp3" }
+    ],
+    draggedTile: null,
+    selectedTileIdx: -1,
+    isDraggingCamera: false,
+    isDraggingPanel: false,
+    panelPos: { x: 400, y: 100 },
+    lastMouse: { x: 0, y: 0 },
+    turn: 0,
+    isMoving: false,
+    modalCb: null,
+    lastDiceRoll: 1
+};
+
+// --- Initialisation des blocs Interact.js ---
+function initBlockDrag() {
+    interact('.block').draggable({
+        inertia: true,
+        modifiers: [
+            interact.modifiers.restrictRect({
+                restriction: 'parent',
+                endOnly: true
+            })
+        ],
+        listeners: {
+            move: dragMoveListener,
+            end: function (event) {
+                const block = event.target;
+                const clone = block.cloneNode(true);
+                clone.classList.add('block-dragged');
+                clone.setAttribute('draggable', 'true');
+                clone.style.position = 'static';
+                clone.style.marginBottom = '10px';
+                blockContainer.appendChild(clone);
+                updateGeneratedCode();
+            }
+        }
+    });
+
+    function dragMoveListener(event) {
+        const target = event.target;
+        const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+        const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+        target.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
+        target.setAttribute('data-x', x);
+        target.setAttribute('data-y', y);
+    }
+}
+
+// --- Mise à jour du code généré ---
+function updateGeneratedCode() {
+    const blocks = blockContainer.querySelectorAll('.block-dragged');
+    let code = "// Code généré automatiquement\n";
+    blocks.forEach(block => {
+        const blockCode = block.getAttribute('data-code');
+        if (blockCode) {
+            code += blockCode + "\n";
+        }
+    });
+    generatedCodeElement.textContent = code;
+}
+
+// --- Changement d'éditeur (Blocs/Code) ---
+window.switchEffectEditor = function(mode) {
+    currentEditorMode = mode;
+    document.getElementById('block-editor').classList.toggle('hidden', mode !== 'blocks');
+    document.getElementById('code-editor').classList.toggle('hidden', mode !== 'code');
+    document.getElementById('tab-blocks').classList.toggle('active', mode === 'blocks');
+    document.getElementById('tab-code').classList.toggle('active', mode === 'code');
+
+    if (mode === 'code') {
+        document.getElementById('effect-custom-code').value = generatedCodeElement.textContent;
+    } else {
+        generatedCodeElement.textContent = document.getElementById('effect-custom-code').value;
+    }
+};
+
+// --- Sauvegarde de l'effet ---
+window.saveCustomEffect = function() {
+    const name = document.getElementById('effect-name').value.trim();
+    const icon = document.getElementById('effect-icon').value.trim();
+    const desc = document.getElementById('effect-desc').value.trim();
+
+    if (!name || !icon) {
+        showModal("Erreur", "Veuillez donner un nom et une icône à votre effet !", "❌", () => {});
+        return;
+    }
+
+    let code = '';
+    if (currentEditorMode === 'blocks') {
+        code = generatedCodeElement.textContent;
+    } else {
+        code = document.getElementById('effect-custom-code').value;
+    }
+
+    if (!code.trim()) {
+        showModal("Erreur", "Veuillez ajouter au moins un bloc ou du code !", "⚠️", () => {});
+        return;
+    }
+
+    const effect = {
+        id: 'custom_' + Date.now(),
+        name: name,
+        icon: icon,
+        desc: desc,
+        type: 'custom',
+        code: code
+    };
+
+    CUSTOM_EFFECTS.push(effect);
+    updateCustomEffectsList();
+    updateSaveList();
+    closeEffectCreator();
+    showModal("Succès", `Effet "${name}" enregistré avec succès !`, "✨", () => {});
+};
+
+// --- Test de l'effet ---
+window.testCustomEffect = function() {
+    const name = document.getElementById('effect-name').value.trim();
+    const icon = document.getElementById('effect-icon').value.trim();
+    const desc = document.getElementById('effect-desc').value.trim();
+
+    if (!name || !icon) {
+        showModal("Erreur", "Veuillez donner un nom et une icône à votre effet !", "❌", () => {});
+        return;
+    }
+
+    let testCode = '';
+    if (currentEditorMode === 'blocks') {
+        testCode = generatedCodeElement.textContent;
+    } else {
+        testCode = document.getElementById('effect-custom-code').value;
+    }
+
+    if (!testCode.trim()) {
+        showModal("Erreur", "Veuillez ajouter au moins un bloc ou du code !", "⚠️", () => {});
+        return;
+    }
+
+    showModal(
+        "Test de l'effet",
+        `<strong>Nom</strong> : ${name}\n` +
+        `<strong>Icône</strong> : ${icon}\n` +
+        `<strong>Description</strong> : ${desc || "Aucune"}\n\n` +
+        `<strong>Code à exécuter</strong> :\n${testCode}`,
+        icon,
+        () => {}
+    );
+};
+
+// --- Fonction pour gérer le drop des blocs ---
+function dropBlock(event) {
+    event.preventDefault();
+    const blockId = event.dataTransfer.getData('text/plain');
+    if (blockId) {
+        const block = document.getElementById(blockId);
+        if (block) {
+            const clone = block.cloneNode(true);
+            clone.classList.add('block-dragged');
+            clone.style.position = 'static';
+            clone.style.marginBottom = '10px';
+            blockContainer.appendChild(clone);
+            updateGeneratedCode();
+        }
+    }
+}
+
+// --- Initialisation ---
+function init() {
+    resize();
+    window.addEventListener('resize', resize);
+
+    viewport.onmousedown = onMouseDown;
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
+    document.getElementById('roll-btn').onclick = window.rollDice;
+    document.getElementById('fs-toggle').onclick = window.toggleFullscreen;
+
+    propPanel.style.left = S.panelPos.x + 'px';
+    propPanel.style.top = S.panelPos.y + 'px';
+    effectCreator.style.left = 'calc(50% - 450px)';
+    effectCreator.style.top = '30px';
+    savePanel.style.left = 'calc(50% - 200px)';
+    savePanel.style.top = '100px';
+
+    // Initialisation de l'éditeur Scratch
+    initBlockDrag();
+
+    // Génération des emojis
+    const picker = document.getElementById('emoji-picker');
+    const effectPicker = document.getElementById('effect-emoji-picker');
+    Object.entries(EMOJIS).forEach(([category, emojis]) => {
+        [picker, effectPicker].forEach(container => {
+            const catDiv = document.createElement('div');
+            catDiv.className = 'emoji-category';
+            catDiv.innerHTML = `<h4>${category}</h4>`;
+            const grid = document.createElement('div');
+            grid.className = 'emoji-grid';
+            emojis.forEach(e => {
+                const emojiDiv = document.createElement('div');
+                emojiDiv.className = 'emoji-item';
+                emojiDiv.textContent = e;
+                emojiDiv.onclick = () => {
+                    const target = container.id === 'emoji-picker' ? 'prop-icon' : 'effect-icon';
+                    document.getElementById(target).value = e;
+                };
+                grid.appendChild(emojiDiv);
+            });
+            catDiv.appendChild(grid);
+            container.appendChild(catDiv);
+        });
+    });
+
+    // Génération des boutons d'éléments spéciaux
+    Object.entries({
+        movement: 'movement-tiles',
+        score: 'score-tiles',
+        social: 'social-tiles',
+        fun: 'fun-tiles'
+    }).forEach(([category, containerId]) => {
+        const container = document.getElementById(containerId);
+        SPECIAL_TILE_TYPES.filter(t => t.category === category).forEach(tile => {
+            const div = document.createElement('div');
+            div.className = 'tile-tool';
+            div.setAttribute('draggable', 'true');
+            div.setAttribute('ondragstart', `sd('${tile.type}', '${tile.icon}', '${tile.name}', ${tile.score}, '${tile.desc}', ${tile.moveVal}, '${tile.moveType}', '${tile.effect || ''}')`);
+            div.textContent = tile.icon;
+            div.title = `${tile.name}: ${tile.desc}`;
+            container.appendChild(div);
+        });
+    });
+
+    // Chargement des sauvegardes
+    loadSavesFromStorage();
+
+    requestAnimationFrame(gameLoop);
+    updateUI();
+    updatePlaylistUI();
+    updateGrid();
+    updateCustomEffectsList();
+    updateSaveList();
+}
+
+// --- Fonctions de base ---
+function resize() { canvas.width = viewport.clientWidth; canvas.height = viewport.clientHeight; }
+function updateGrid() { gridBg.style.transform = `translate(${S.camera.x}px, ${S.camera.y}px) scale(${S.camera.zoom})`; }
+window.startGame = function() { document.getElementById('start-screen').style.display = 'none'; };
+window.showStartScreen = function() { document.getElementById('start-screen').style.display = 'flex'; };
+window.toggleFullscreen = function() { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); };
+
+// --- Fonctions de jeu ---
+function onMouseDown(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left - canvas.width / 2 - S.camera.x) / S.camera.zoom;
+    const my = (e.clientY - rect.top - canvas.height / 2 - S.camera.y) / S.camera.zoom;
+    if (S.mode === 'edit') {
+        const hit = S.tiles.findIndex(t => Math.hypot(t.x - mx, t.y - my) < 45);
+        if (hit !== -1) { openPropPanel(hit); return; }
+    }
+    S.isDraggingCamera = true;
+    S.lastMouse = { x: e.clientX, y: e.clientY };
+}
+
+function onMouseMove(e) {
+    const dx = e.clientX - S.lastMouse.x;
+    const dy = e.clientY - S.lastMouse.y;
+    if (S.isDraggingPanel) {
+        S.panelPos.x += dx; S.panelPos.y += dy;
+        propPanel.style.left = S.panelPos.x + 'px'; propPanel.style.top = S.panelPos.y + 'px';
+        effectCreator.style.left = (S.panelPos.x + 40) + 'px'; effectCreator.style.top = (S.panelPos.y + 40) + 'px';
+    } else if (S.isDraggingCamera) {
+        S.camera.x += dx; S.camera.y += dy; updateGrid();
+    }
+    S.lastMouse = { x: e.clientX, y: e.clientY };
+}
+
+function onMouseUp() { S.isDraggingCamera = false; S.isDraggingPanel = false; }
+
+window.sd = function(type, icon, name, score, desc, moveVal, moveType, effect) {
+    S.draggedTile = { type, icon, name, score, desc, moveVal, moveType, effect };
+};
+
+window.handleDrop = function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left - canvas.width / 2 - S.camera.x) / S.camera.zoom;
+    const my = (e.clientY - rect.top - canvas.height / 2 - S.camera.y) / S.camera.zoom;
+    if (S.draggedTile) {
+        S.tiles.push({ x: mx, y: my, ...S.draggedTile });
+        S.draggedTile = null;
+    }
+};
+
+function openPropPanel(idx) {
+    S.selectedTileIdx = idx;
+    const t = S.tiles[idx];
+    document.getElementById('prop-index-display').innerText = idx;
+    document.getElementById('prop-name').value = t.name;
+    document.getElementById('prop-score').value = t.score;
+    document.getElementById('prop-icon').value = t.icon;
+    document.getElementById('prop-move-type').value = t.moveType || 'none';
+    document.getElementById('prop-move-val').value = t.moveVal || 0;
+    document.getElementById('prop-desc').value = t.desc || '';
+
+    const effectSelect = document.getElementById('prop-effect');
+    effectSelect.innerHTML = '<option value="">Aucun</option>';
+
+    const predefinedEffects = [
+        {value: 'doubleScore', text: 'Double les points'},
+        {value: 'changeColor', text: 'Change la couleur'},
+        {value: 'swapPlayer', text: 'Échange de place'},
+        {value: 'shield', text: 'Bouclier'},
+        {value: 'vortex', text: 'Tourbillon (perd 1 tour)'},
+        {value: 'turbo', text: 'Turbo (x2 le dé)'},
+        {value: 'slow', text: 'Ralentissement (1/2 dé)'},
+        {value: 'reverse', text: 'Inversion (recule)'},
+        {value: 'jackpot', text: 'Jackpot (+100 +10/adv)'},
+        {value: 'bet', text: 'Pari (mise 50%)'},
+        {value: 'crash', text: 'Krash (-30%)'},
+        {value: 'steal', text: 'Vol (-20 à un adversaire)'},
+        {value: 'alliance', text: 'Alliance (+50 chacun)'},
+        {value: 'camouflage', text: 'Caméléon (copie le leader)'},
+        {value: 'duel', text: 'Duel (dé contre un adversaire)'},
+        {value: 'usurpation', text: 'Usurpation (prend place+score)'},
+        {value: 'ghost', text: 'Fantôme (immunité 1 tour)'}
+    ];
+
+    predefinedEffects.forEach(effect => {
+        const opt = document.createElement('option');
+        opt.value = effect.value;
+        opt.textContent = effect.text;
+        if (t.effect === effect.value) opt.selected = true;
+        effectSelect.appendChild(opt);
+    });
+
+    CUSTOM_EFFECTS.forEach(effect => {
+        const opt = document.createElement('option');
+        opt.value = effect.id;
+        opt.textContent = effect.name;
+        if (t.effect === effect.id) opt.selected = true;
+        effectSelect.appendChild(opt);
+    });
+
+    updateMoveUI(t.moveType);
+    propPanel.classList.add('open');
+}
+
+function updateMoveUI(type) {
+    const c = document.getElementById('move-val-container');
+    const l = document.getElementById('move-val-label');
+    if (type === 'none' || type === 'reset') c.classList.add('hidden');
+    else {
+        c.classList.remove('hidden');
+        l.innerText = type === 'relative' ? "Décalage :" : "Index cible :";
+    }
+}
+
+window.updateTileData = function() {
+    if (S.selectedTileIdx === -1) return;
+    const t = S.tiles[S.selectedTileIdx];
+    t.name = document.getElementById('prop-name').value;
+    t.score = parseInt(document.getElementById('prop-score').value) || 0;
+    t.icon = document.getElementById('prop-icon').value;
+    t.moveType = document.getElementById('prop-move-type').value;
+    t.moveVal = parseInt(document.getElementById('prop-move-val').value) || 0;
+    t.desc = document.getElementById('prop-desc').value;
+    t.effect = document.getElementById('prop-effect').value || null;
+    updateMoveUI(t.moveType);
+};
+
+window.deleteSelectedTile = function() {
+    if (S.selectedTileIdx > 0) { S.tiles.splice(S.selectedTileIdx, 1); window.closePropPanel(); }
+};
+
+window.closePropPanel = function() { S.selectedTileIdx = -1; propPanel.classList.remove('open'); };
+window.startDraggingPanel = function(e) { S.isDraggingPanel = true; S.lastMouse = { x: e.clientX, y: e.clientY }; };
+
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(canvas.width / 2 + S.camera.x, canvas.height / 2 + S.camera.y);
+    ctx.scale(S.camera.zoom, S.camera.zoom);
+
+    if (S.tiles.length > 1) {
+        ctx.beginPath(); ctx.strokeStyle = "rgba(59, 130, 246, 0.2)"; ctx.lineWidth = 4;
+        ctx.moveTo(S.tiles[0].x, S.tiles[0].y);
+        for(let i=1; i<S.tiles.length; i++) ctx.lineTo(S.tiles[i].x, S.tiles[i].y);
+        ctx.stroke();
+    }
+
+    S.tiles.forEach((t, i) => {
+        ctx.beginPath(); ctx.arc(t.x, t.y, 45, 0, Math.PI*2);
+        ctx.fillStyle = (S.selectedTileIdx === i) ? "#3b82f6" : "#1e293b";
+        ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,0.1)"; ctx.stroke();
+        ctx.font = "30px sans-serif"; ctx.textAlign = "center"; ctx.fillText(t.icon, t.x, t.y + 10);
+        if (S.mode === 'edit') {
+            ctx.font = "900 12px Outfit"; ctx.fillStyle = "rgba(255,255,255,0.3)";
+            ctx.fillText(i, t.x, t.y - 25);
+        }
+    });
+
+    S.players.forEach((p, i) => {
+        const target = S.tiles[p.tileIdx] || {x:0, y:0};
+        p.x += (target.x - p.x) * 0.1; p.y += (target.y - p.y) * 0.1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, Math.PI*2);
+        ctx.fillStyle = p.ghost ? "rgba(139, 92, 246, 0.5)" : p.color;
+        ctx.fill();
+        if (i === S.turn) { ctx.strokeStyle = "white"; ctx.lineWidth = 4; ctx.stroke(); }
+        if (p.shield) {
+            ctx.font = "20px sans-serif"; ctx.fillStyle = "white";
+            ctx.fillText("🛡️", p.x - 10, p.y - 20);
+        }
+        if (p.slow > 0) {
+            ctx.font = "20px sans-serif"; ctx.fillStyle = "white";
+            ctx.fillText("🐢", p.x + 10, p.y - 20);
+        }
+    });
+
+    ctx.restore();
+    requestAnimationFrame(gameLoop);
+}
+
+// --- Animation du dé ---
+window.rollDice = function() {
+    if (S.isMoving || S.mode === 'edit') return;
+    S.isMoving = true;
+
+    const diceElement = document.getElementById('dice-result');
+    diceElement.classList.add('rolling');
+    diceElement.textContent = '🎲';
+
+    let rollCount = 0;
+    const rollInterval = setInterval(() => {
+        const randomValue = Math.ceil(Math.random() * 6);
+        diceElement.textContent = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][randomValue - 1];
+        rollCount++;
+
+        if (rollCount > 10) {
+            clearInterval(rollInterval);
+            diceElement.classList.remove('rolling');
+            S.lastDiceRoll = randomValue;
+            setTimeout(() => applyMove(randomValue), 500);
+        }
+    }, 100);
+};
+
+function applyMove(steps) {
+    const p = S.players[S.turn];
+    if (p.slow > 0) steps = Math.ceil(steps / 2);
+    let nextIdx = Math.min(p.tileIdx + steps, S.tiles.length - 1);
+    p.tileIdx = nextIdx;
+
+    setTimeout(() => {
+        const t = S.tiles[p.tileIdx];
+        p.score += (t.score || 0);
+        let finalIdx = p.tileIdx;
+        let msg = t.desc || "";
+        let effectApplied = false;
+
+        if (t.effect === 'doubleScore') {
+            p.score *= 2;
+            msg += "\n🍀 Vos points sont doublés !";
+            effectApplied = true;
+        }
+        else if (t.effect === 'changeColor') {
+            p.color = `hsl(${Math.random()*360}, 70%, 50%)`;
+            msg += "\n🎨 Votre couleur a changé !";
+            effectApplied = true;
+        }
+        else if (t.effect === 'swapPlayer') {
+            const otherPlayerIdx = (S.turn + 1) % S.players.length;
+            [p.tileIdx, S.players[otherPlayerIdx].tileIdx] = [S.players[otherPlayerIdx].tileIdx, p.tileIdx];
+            msg += `\n🔀 Vous avez échangé de place avec ${S.players[otherPlayerIdx].name} !`;
+            effectApplied = true;
+        }
+        else if (t.effect === 'shield') {
+            p.shield = true;
+            msg += "\n🛡️ Vous êtes protégé contre le prochain malus !";
+            effectApplied = true;
+        }
+        else if (t.effect === 'vortex') {
+            p.slow = 0;
+            S.turn = (S.turn + 1) % S.players.length;
+            msg += "\n🌀 Vous tournez sur vous-même et perdez votre tour !";
+            effectApplied = true;
+        }
+        else if (t.effect === 'turbo') {
+            finalIdx = Math.min(p.tileIdx + S.lastDiceRoll, S.tiles.length - 1);
+            msg += `\n🚗 Turbo ! Avancez de ${S.lastDiceRoll} cases supplémentaires !`;
+            effectApplied = true;
+        }
+        else if (t.effect === 'slow') {
+            p.slow = 2;
+            msg += "\n🐢 Vous êtes ralenti pour 2 tours !";
+            effectApplied = true;
+        }
+        else if (t.effect === 'reverse') {
+            finalIdx = Math.max(0, p.tileIdx - S.lastDiceRoll);
+            msg += `\n🔄 Inversion ! Reculez de ${S.lastDiceRoll} cases !`;
+            effectApplied = true;
+        }
+        else if (t.effect === 'jackpot') {
+            p.score += 100 + (S.players.length - 1) * 10;
+            msg += `\n💰 Jackpot ! +100 points +10 par adversaire !`;
+            effectApplied = true;
+        }
+        else if (t.effect === 'bet') {
+            p.bet = Math.floor(p.score * 0.5);
+            msg += `\n🎲 Pari engagé : ${p.bet} points misés !`;
+            effectApplied = true;
+        }
+        else if (t.effect === 'crash') {
+            p.score = Math.floor(p.score * 0.7);
+            msg += "\n📉 Krash ! -30% de vos points !";
+            effectApplied = true;
+        }
+        else if (t.effect === 'steal') {
+            const otherPlayerIdx = (S.turn + 1) % S.players.length;
+            const stolen = Math.min(20, S.players[otherPlayerIdx].score);
+            p.score += stolen;
+            S.players[otherPlayerIdx].score -= stolen;
+            msg += `\n💸 Vous volez ${stolen} points à ${S.players[otherPlayerIdx].name} !`;
+            effectApplied = true;
+        }
+        else if (t.effect === 'alliance') {
+            const otherPlayerIdx = (S.turn + 1) % S.players.length;
+            p.score += 50;
+            S.players[otherPlayerIdx].score += 50;
+            msg += `\n🤝 Alliance avec ${S.players[otherPlayerIdx].name} : +50 points chacun !`;
+            effectApplied = true;
+        }
+        else if (t.effect === 'camouflage') {
+            const leader = S.players.reduce((prev, curr) => curr.score > prev.score ? curr : prev);
+            p.color = leader.color;
+            p.score = leader.score;
+            msg += `\n🎭 Caméléon : vous copiez ${leader.name} !`;
+            effectApplied = true;
+        }
+        else if (t.effect === 'duel') {
+            const otherPlayerIdx = (S.turn + 1) % S.players.length;
+            const pRoll = Math.ceil(Math.random() * 6);
+            const oRoll = Math.ceil(Math.random() * 6);
+            if (pRoll >= oRoll) {
+                msg += `\n⚔️ Duel gagné contre ${S.players[otherPlayerIdx].name} (${pRoll} vs ${oRoll}) !`;
+            } else {
+                finalIdx = Math.max(0, p.tileIdx - 3);
+                msg += `\n⚔️ Duel perdu contre ${S.players[otherPlayerIdx].name} (${pRoll} vs ${oRoll}) : reculez de 3 cases !`;
+            }
+            effectApplied = true;
+        }
+        else if (t.effect === 'usurpation') {
+            const otherPlayerIdx = (S.turn + 1) % S.players.length;
+            const tempTile = p.tileIdx;
+            const tempScore = p.score;
+            p.tileIdx = S.players[otherPlayerIdx].tileIdx;
+            p.score = S.players[otherPlayerIdx].score;
+            S.players[otherPlayerIdx].tileIdx = tempTile;
+            S.players[otherPlayerIdx].score = tempScore;
+            msg += `\n👑 Usurpation : vous prenez la place et le score de ${S.players[otherPlayerIdx].name} !`;
+            effectApplied = true;
+        }
+        else if (t.effect === 'ghost') {
+            p.ghost = true;
+            p.shield = true;
+            msg += "\n👻 Vous devenez un fantôme pour 1 tour !";
+            effectApplied = true;
+        }
+        else if (t.effect && t.effect.startsWith('custom_')) {
+            const customEffect = CUSTOM_EFFECTS.find(e => e.id === t.effect);
+            if (customEffect && customEffect.code) {
+                try {
+                    let msgAdd = "";
+                    const originalMsg = msg;
+                    eval(customEffect.code);
+                    msg = originalMsg + msgAdd;
+                    effectApplied = true;
+                } catch (e) {
+                    console.error("Erreur dans l'effet personnalisé:", e);
+                    msg += "\n⚠️ Erreur dans l'effet personnalisé !";
+                }
+            }
+        }
+
+        if (!effectApplied && t.moveType === 'relative') {
+            finalIdx = Math.max(0, Math.min(p.tileIdx + t.moveVal, S.tiles.length - 1));
+            msg += t.moveVal > 0 ? `\n🚀 Avancez de ${t.moveVal} cases !` : `\n🕳️ Reculez de ${Math.abs(t.moveVal)} cases !`;
+        }
+        else if (!effectApplied && t.moveType === 'absolute') {
+            finalIdx = Math.max(0, Math.min(t.moveVal, S.tiles.length - 1));
+            msg += `\n🌀 Téléportation vers la case #${finalIdx} !`;
+        }
+        else if (!effectApplied && t.moveType === 'reset') {
+            finalIdx = 0;
+            msg += `\n↩️ Retour au point de départ !`;
+        }
+
+        if (p.bet !== null) {
+            if (S.lastDiceRoll === 6) {
+                p.score += p.bet;
+                msg += `\n🎲 Pari gagné ! Vous récupérez ${p.bet} points !`;
+            } else {
+                p.score -= p.bet;
+                msg += `\n🎲 Pari perdu... Vous perdez ${p.bet} points.`;
+            }
+            p.bet = null;
+        }
+
+        if (p.ghost) p.ghost = false;
+        if (p.slow > 0) {
+            p.slow--;
+            if (p.slow === 0) msg += "\n🐢 Votre ralentissement est terminé !";
+        }
+
+        showModal(t.name || "Case Atteinte", msg, t.icon, () => {
+            p.tileIdx = finalIdx;
+            S.isMoving = false;
+            S.turn = (S.turn + 1) % S.players.length;
+            updateUI();
+        });
+    }, 600);
+}
+
+function showModal(title, desc, icon, callback) {
+    document.getElementById('modal-title').innerText = title;
+    document.getElementById('modal-desc').innerHTML = desc.replace(/\n/g, '<br>');
+    document.getElementById('modal-icon').innerText = icon;
+    document.getElementById('modal-overlay').classList.replace('hidden', 'flex');
+    S.modalCb = callback;
+}
+
+window.closeModal = function() {
+    document.getElementById('modal-overlay').classList.replace('flex', 'hidden');
+    if (S.modalCb) S.modalCb();
+    S.modalCb = null;
+};
+
+window.switchTab = function(m) {
+    S.mode = m === 'audio' ? 'play' : m;
+    document.getElementById('panel-play').classList.toggle('hidden', m !== 'play');
+    document.getElementById('panel-edit').classList.toggle('hidden', m !== 'edit');
+    document.getElementById('panel-audio').classList.toggle('hidden', m !== 'audio');
+    document.getElementById('tab-play').classList.toggle('active', m === 'play');
+    document.getElementById('tab-edit').classList.toggle('active', m === 'edit');
+    document.getElementById('tab-audio').classList.toggle('active', m === 'audio');
+
+    document.getElementById('standard-edit').classList.toggle('hidden', m !== 'edit');
+    document.getElementById('custom-edit').classList.toggle('hidden', m !== 'custom');
+    document.getElementById('tab-edit').classList.toggle('active', m === 'edit');
+    document.getElementById('tab-custom').classList.toggle('active', m === 'custom');
+
+    window.closePropPanel();
+};
+
+window.addPlayer = function() {
+    const id = S.players.length + 1;
+    S.players.push({ id, name: `Joueur ${id}`, color: `hsl(${Math.random()*360}, 70%, 50%)`, tileIdx: 0, x: 0, y: 0, score: 0, shield: false, ghost: false, slow: 0, bet: null });
+    updateUI();
+};
+
+function updateUI() {
+    const list = document.getElementById('player-list');
+    list.innerHTML = '';
+    S.players.forEach((p, i) => {
+        const card = document.createElement('div');
+        card.className = `p-3 rounded-xl bg-white/5 border-l-4 transition-all ${i === S.turn ? 'border-blue-500 bg-white/10 shadow-lg' : 'border-transparent opacity-80'}`;
+        card.innerHTML = `
+            <div class="flex justify-between font-bold text-xs">
+                <span>${p.name}</span>
+                <span>${p.score} pts${p.shield ? ' 🛡️' : ''}${p.ghost ? ' 👻' : ''}${p.slow > 0 ? ' 🐢' : ''}${p.bet ? ' 🎲' : ''}</span>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+}
+
+// --- Audio ---
+function getYoutubeId(url) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+}
+
+window.addAudio = function() {
+    const url = document.getElementById('audio-url').value;
+    const name = document.getElementById('audio-name').value || "Musique Sucoona";
+    if(!url) return;
+    const ytId = getYoutubeId(url);
+    const type = ytId ? 'youtube' : 'mp3';
+    const finalUrl = ytId ? ytId : url;
+    S.playlist.push({ id: Date.now(), name, url: finalUrl, type });
+    updatePlaylistUI();
+    document.getElementById('audio-url').value = "";
+    document.getElementById('audio-name').value = "";
+};
+
+function updatePlaylistUI() {
+    const container = document.getElementById('playlist-container');
+    container.innerHTML = "";
+    S.playlist.forEach(track => {
+        const div = document.createElement('div');
+        div.className = "audio-item p-2 bg-black/20 rounded-xl mb-2";
+        div.innerHTML = `
+            <div class="flex justify-between items-center">
+                <div class="truncate text-xs font-bold">${track.name}</div>
+                <div class="flex gap-2">
+                    <button onclick="playTrack('${track.id}')" class="text-blue-400 hover:text-blue-300">▶</button>
+                    <button onclick="stopTrack()" class="text-red-400 hover:text-red-300">■</button>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+window.playTrack = function(id) {
+    window.stopTrack();
+    const track = S.playlist.find(t => t.id == id);
+    if(!track) return;
+    if(track.type === 'youtube') {
+        currentAudioType = 'youtube';
+        if(ytPlayer && ytPlayer.loadVideoById) {
+            ytPlayer.loadVideoById(track.url);
+            ytPlayer.playVideo();
+        }
+    } else {
+        currentAudioType = 'mp3';
+        currentAudio = new Audio(track.url);
+        currentAudio.loop = true;
+        currentAudio.volume = document.getElementById('audio-volume').value / 100;
+        currentAudio.play().catch(e => console.log(e));
+    }
+};
+
+window.stopTrack = function() {
+    if(currentAudioType === 'mp3' && currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+    } else if(currentAudioType === 'youtube' && ytPlayer && ytPlayer.stopVideo) {
+        ytPlayer.stopVideo();
+    }
+};
+
+window.setVolume = function(val) {
+    const v = val / 100;
+    if(currentAudio) currentAudio.volume = v;
+    if(ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(val);
+};
+
+// --- Gestion des sauvegardes ---
+window.openSavePanel = function() {
+    savePanel.classList.add('open');
+    updateSaveList();
+};
+
+window.closeSavePanel = function() {
+    savePanel.classList.remove('open');
+};
+
+function updateSaveList() {
+    const container = document.getElementById('save-list');
+    container.innerHTML = '';
+    SAVES.forEach((save, index) => {
+        const div = document.createElement('div');
+        div.className = 'save-item transition-all';
+        div.innerHTML = `
+            <div class="flex-grow">
+                <div class="font-bold">${save.name || `Sauvegarde ${index + 1}`}</div>
+                <div class="save-meta">
+                    ${new Date(save.date).toLocaleString()} |
+                    ${save.tiles.length} cases |
+                    ${save.customEffects.length} effets personnalisés
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="loadSave(${index})" class="text-blue-400 hover:text-blue-300 text-xs">Charger</button>
+                <button onclick="deleteSave(${index})" class="text-red-400 hover:text-red-300 text-xs">✕</button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function saveGame(type) {
+    const name = document.getElementById('save-name').value || `Sauvegarde ${SAVES.length + 1}`;
+    const saveData = {
+        name: name,
+        date: new Date().getTime(),
+        type: type,
+        tiles: JSON.parse(JSON.stringify(S.tiles)),
+        players: type === 'full' ? JSON.parse(JSON.stringify(S.players)) : [],
+        turn: type === 'full' ? S.turn : 0,
+        customEffects: JSON.parse(JSON.stringify(CUSTOM_EFFECTS))
+    };
+    SAVES.push(saveData);
+    saveToLocalStorage();
+    updateSaveList();
+    document.getElementById('save-name').value = '';
+    showModal("Sauvegarde", `Sauvegarde "${name}" enregistrée avec succès !`, "💾", () => {});
+}
+
+function loadSave(index) {
+    const save = SAVES[index];
+    if (!save) return;
+    if (confirm(`Charger la sauvegarde "${save.name}" ?\nCela écrasera la partie actuelle.`)) {
+        S.tiles = JSON.parse(JSON.stringify(save.tiles));
+        if (save.type === 'full') {
+            S.players = JSON.parse(JSON.stringify(save.players));
+            S.turn = save.turn;
+        }
+        CUSTOM_EFFECTS.length = 0;
+        save.customEffects.forEach(effect => CUSTOM_EFFECTS.push(JSON.parse(JSON.stringify(effect))));
+        updateCustomEffectsList();
+        updateUI();
+        showModal("Chargement", `Sauvegarde "${save.name}" chargée avec succès !`, "📂", () => {});
+    }
+}
+
+function deleteSave(index) {
+    if (confirm("Supprimer cette sauvegarde ?")) {
+        SAVES.splice(index, 1);
+        saveToLocalStorage();
+        updateSaveList();
+    }
+}
+
+function saveToLocalStorage() {
+    localStorage.setItem('sucoonaGameSaves', JSON.stringify(SAVES));
+    localStorage.setItem('sucoonaGameCustomEffects', JSON.stringify(CUSTOM_EFFECTS));
+}
+
+function loadSavesFromStorage() {
+    const saves = localStorage.getItem('sucoonaGameSaves');
+    const customEffects = localStorage.getItem('sucoonaGameCustomEffects');
+    if (saves) {
+        try {
+            const parsed = JSON.parse(saves);
+            if (Array.isArray(parsed)) SAVES.push(...parsed);
+        } catch (e) { console.error("Erreur de chargement des sauvegardes:", e); }
+    }
+    if (customEffects) {
+        try {
+            const parsed = JSON.parse(customEffects);
+            if (Array.isArray(parsed)) CUSTOM_EFFECTS.push(...parsed);
+        } catch (e) { console.error("Erreur de chargement des effets personnalisés:", e); }
+    }
+}
+
+// --- Gestion des effets personnalisés ---
+function updateCustomEffectsList() {
+    const container = document.getElementById('custom-effects-list');
+    container.innerHTML = '';
+    CUSTOM_EFFECTS.forEach((effect, index) => {
+        const div = document.createElement('div');
+        div.className = 'custom-effect-item transition-all';
+        div.innerHTML = `
+            <div>
+                <span class="text-lg">${effect.icon}</span>
+                <span class="ml-2">${effect.name}</span>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="useCustomEffect(${index})" class="text-blue-400 hover:text-blue-300 text-xs">✏️</button>
+                <button onclick="deleteCustomEffect(${index})" class="text-red-400 hover:text-red-300 text-xs">✕</button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function useCustomEffect(index) {
+    const effect = CUSTOM_EFFECTS[index];
+    window.sd('CUSTOM', effect.icon, effect.name, 0, effect.desc, 0, 'none', effect.id);
+    closeEffectCreator();
+}
+
+function deleteCustomEffect(index) {
+    CUSTOM_EFFECTS.splice(index, 1);
+    updateCustomEffectsList();
+    updateSaveList();
+}
+
+// --- Ouverture du créateur d'effets ---
+window.openEffectCreator = function() {
+    effectCreator.classList.add('open');
+    document.getElementById('effect-name').value = '';
+    document.getElementById('effect-icon').value = '';
+    document.getElementById('effect-desc').value = '';
+    document.getElementById('effect-custom-code').value = '';
+    generatedCodeElement.textContent = '';
+    blockContainer.innerHTML = '';
+    document.getElementById('effect-name').focus();
+};
+
+window.closeEffectCreator = function() {
+    effectCreator.classList.remove('open');
+};
+
+// --- Lancement ---
+init();
+</script>
+</body>
+</html>
