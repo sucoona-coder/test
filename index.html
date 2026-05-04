@@ -3,21 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>Mini Rocket League Web</title>
+  <title>Rocket 3D Web</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="ui">
-    <h1>Mini Rocket League</h1>
-    <p>
-      Joueur 1 : ZQSD + Shift (boost) |
-      Joueur 2 : Flèches + Ctrl droit (boost)
-    </p>
-    <p id="score">0 - 0</p>
+    <h1>Rocket Arena 3D</h1>
+    <div class="row">
+      <label for="mode">Mode :</label>
+      <select id="mode">
+        <option value="duel">Duel vs IA</option>
+        <option value="time">Time Attack (60s)</option>
+        <option value="chaos">Chaos Ball</option>
+      </select>
+      <button id="restart">Relancer</button>
+    </div>
+    <p>Contrôles: ZQSD / Flèches pour tourner + avancer/reculer, Shift = boost.</p>
+    <p id="score">Bleu 0 - 0 Orange</p>
+    <p id="timer"></p>
   </div>
-
-  <canvas id="game" width="1100" height="650"></canvas>
-
+  <canvas id="game" width="1200" height="700"></canvas>
   <script src="script.js"></script>
 </body>
 </html>
