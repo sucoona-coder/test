@@ -1,359 +1,168 @@
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const timerEl = document.getElementById('timer');
+const modeEl = document.getElementById('mode');
+const restartBtn = document.getElementById('restart');
 
-const scoreEl = document.getElementById("score");
-
-const W = canvas.width;
-const H = canvas.height;
-
-const FIELD = {
-  x: 60,
-  y: 40,
-  w: W - 120,
-  h: H - 80
-};
-
-const GOAL = {
-  depth: 24,
-  width: 180
-};
-
+const W = canvas.width, H = canvas.height;
+const FIELD = { x: -520, z: -300, w: 1040, h: 600 };
+const GOAL_W = 220;
 const keys = {};
-window.addEventListener("keydown", (e) => (keys[e.key.toLowerCase()] = true));
-window.addEventListener("keyup", (e) => (keys[e.key.toLowerCase()] = false));
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-
-function length(x, y) {
-  return Math.hypot(x, y);
+const camera = { y: 680, z: 760, fov: 730 };
+function project(x,y,z){
+  const dz = (z + camera.z);
+  const s = camera.fov / Math.max(80, dz);
+  return { x: W/2 + x*s, y: H*0.82 - (y + camera.y)*s, s };
 }
 
-// --- Sons simples (WebAudio) ---
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function beep(freq = 300, dur = 0.06, type = "square", gain = 0.04) {
-  const t0 = audioCtx.currentTime;
-  const osc = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  osc.type = type;
-  osc.frequency.value = freq;
-  g.gain.value = gain;
-  osc.connect(g).connect(audioCtx.destination);
-  osc.start(t0);
-  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  osc.stop(t0 + dur);
-}
-window.addEventListener("click", () => audioCtx.resume(), { once: true });
+function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+function dist(a,b){ return Math.hypot(a.x-b.x, a.z-b.z); }
 
-// --- Entités ---
 class Car {
-  constructor(x, y, color, controls) {
-    this.x = x;
-    this.y = y;
-    this.vx = 0;
-    this.vy = 0;
-    this.angle = 0;
-    this.r = 20;
-    this.color = color;
-    this.controls = controls;
-
-    this.boost = 100;
+  constructor(x,z,color,isAI=false){
+    this.x=x; this.z=z; this.vx=0; this.vz=0; this.a=0; this.r=24;
+    this.color=color; this.boost=100; this.isAI=isAI;
   }
-
-  update(dt) {
-    const up = keys[this.controls.up];
-    const down = keys[this.controls.down];
-    const left = keys[this.controls.left];
-    const right = keys[this.controls.right];
-    const boosting = keys[this.controls.boost] && this.boost > 0;
-
-    const turnSpeed = 3.6;
-    if (left) this.angle -= turnSpeed * dt;
-    if (right) this.angle += turnSpeed * dt;
-
-    const forward = up ? 1 : 0;
-    const backward = down ? -0.7 : 0;
-    let accel = 410 * (forward + backward);
-
-    if (boosting && forward > 0) {
-      accel *= 1.85;
-      this.boost = Math.max(0, this.boost - 32 * dt);
+  control(dt,target){
+    let up=false, down=false, left=false, right=false, boosting=false;
+    if(this.isAI){
+      const tx = target.x - this.x, tz = target.z - this.z;
+      const desired = Math.atan2(tz,tx);
+      let d = desired - this.a; while(d>Math.PI)d-=Math.PI*2; while(d<-Math.PI)d+=Math.PI*2;
+      left = d < -0.08; right = d > 0.08; up = true;
+      boosting = Math.abs(d)<0.35 && this.boost>20;
     } else {
-      this.boost = Math.min(100, this.boost + 18 * dt);
+      up = keys['z'] || keys['arrowup'];
+      down = keys['s'] || keys['arrowdown'];
+      left = keys['q'] || keys['arrowleft'];
+      right = keys['d'] || keys['arrowright'];
+      boosting = keys['shift'] && this.boost>0;
     }
+    if(left) this.a -= 3.4*dt;
+    if(right) this.a += 3.4*dt;
 
-    this.vx += Math.cos(this.angle) * accel * dt;
-    this.vy += Math.sin(this.angle) * accel * dt;
+    let acc = ((up?1:0) + (down?-0.65:0)) * 470;
+    if(boosting && up){ acc *= 1.8; this.boost = Math.max(0, this.boost - 36*dt);} else this.boost = Math.min(100, this.boost + 16*dt);
 
-    // Friction
-    this.vx *= 0.985;
-    this.vy *= 0.985;
+    this.vx += Math.cos(this.a) * acc * dt;
+    this.vz += Math.sin(this.a) * acc * dt;
+    this.vx *= 0.985; this.vz *= 0.985;
+    const max = boosting ? 470 : 320;
+    const sp = Math.hypot(this.vx, this.vz);
+    if(sp>max){ this.vx = this.vx/sp*max; this.vz = this.vz/sp*max; }
 
-    // Vitesse max
-    const maxSpeed = boosting ? 430 : 300;
-    const sp = length(this.vx, this.vy);
-    if (sp > maxSpeed) {
-      this.vx = (this.vx / sp) * maxSpeed;
-      this.vy = (this.vy / sp) * maxSpeed;
-    }
-
-    this.x += this.vx * dt;
-    this.y += this.vy * dt;
-
-    // Collision bords terrain (sauf zone de but)
-    const inGoalY =
-      this.y > H / 2 - GOAL.width / 2 && this.y < H / 2 + GOAL.width / 2;
-
-    // Gauche
-    if (this.x - this.r < FIELD.x - (inGoalY ? GOAL.depth : 0)) {
-      this.x = FIELD.x - (inGoalY ? GOAL.depth : 0) + this.r;
-      this.vx *= -0.45;
-      beep(180, 0.03, "triangle", 0.02);
-    }
-    // Droite
-    if (this.x + this.r > FIELD.x + FIELD.w + (inGoalY ? GOAL.depth : 0)) {
-      this.x = FIELD.x + FIELD.w + (inGoalY ? GOAL.depth : 0) - this.r;
-      this.vx *= -0.45;
-      beep(180, 0.03, "triangle", 0.02);
-    }
-    // Haut/Bas
-    if (this.y - this.r < FIELD.y) {
-      this.y = FIELD.y + this.r;
-      this.vy *= -0.45;
-      beep(180, 0.03, "triangle", 0.02);
-    }
-    if (this.y + this.r > FIELD.y + FIELD.h) {
-      this.y = FIELD.y + FIELD.h - this.r;
-      this.vy *= -0.45;
-      beep(180, 0.03, "triangle", 0.02);
-    }
+    this.x += this.vx*dt; this.z += this.vz*dt;
+    this.x = clamp(this.x, FIELD.x+this.r, FIELD.x+FIELD.w-this.r);
+    this.z = clamp(this.z, FIELD.z+this.r, FIELD.z+FIELD.h-this.r);
   }
-
-  draw() {
+  draw(){
+    const p = project(this.x, 0, this.z);
+    const w = 70*p.s*0.12, h=42*p.s*0.12;
     ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.angle);
-
-    // ombre
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.fillRect(-18, -11, 36, 22);
-
-    // corps
-    ctx.fillStyle = this.color;
-    ctx.fillRect(-20, -12, 40, 24);
-
-    // pare-brise
-    ctx.fillStyle = "rgba(255,255,255,0.45)";
-    ctx.fillRect(2, -8, 12, 16);
-
-    // roues
-    ctx.fillStyle = "#111827";
-    ctx.fillRect(-18, -14, 8, 4);
-    ctx.fillRect(-18, 10, 8, 4);
-    ctx.fillRect(10, -14, 8, 4);
-    ctx.fillRect(10, 10, 8, 4);
-
+    ctx.translate(p.x,p.y);
+    ctx.rotate(this.a+Math.PI/2);
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(-w/2+3, -h/2+3, w,h);
+    ctx.fillStyle = this.color; ctx.fillRect(-w/2,-h/2,w,h);
+    ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fillRect(w*0.05,-h*0.35,w*0.35,h*0.7);
     ctx.restore();
-
-    // jauge boost
-    const bw = 72;
-    const bh = 8;
-    const bx = this.x - bw / 2;
-    const by = this.y - 34;
-    ctx.fillStyle = "rgba(15,23,42,0.8)";
-    ctx.fillRect(bx, by, bw, bh);
-    ctx.fillStyle = this.color;
-    ctx.fillRect(bx, by, (bw * this.boost) / 100, bh);
   }
 }
 
 class Ball {
-  constructor() {
-    this.r = 16;
-    this.reset();
+  constructor(){ this.r=18; this.reset(); }
+  reset(){ this.x=0; this.z=0; this.vx=(Math.random()*2-1)*120; this.vz=(Math.random()*2-1)*120; }
+  update(dt, chaos=false){
+    if(chaos){ this.vx += (Math.random()*2-1)*40*dt; this.vz += (Math.random()*2-1)*40*dt; }
+    this.x += this.vx*dt; this.z += this.vz*dt;
+    this.vx *= 0.995; this.vz *= 0.995;
+    if(this.x-this.r < FIELD.x){ this.x = FIELD.x+this.r; this.vx *= -0.9; }
+    if(this.x+this.r > FIELD.x+FIELD.w){ this.x = FIELD.x+FIELD.w-this.r; this.vx *= -0.9; }
+    if(this.z-this.r < FIELD.z){ this.z = FIELD.z+this.r; this.vz *= -0.9; }
+    if(this.z+this.r > FIELD.z+FIELD.h){ this.z = FIELD.z+FIELD.h-this.r; this.vz *= -0.9; }
   }
-
-  reset() {
-    this.x = W / 2;
-    this.y = H / 2;
-    this.vx = (Math.random() * 2 - 1) * 80;
-    this.vy = (Math.random() * 2 - 1) * 80;
-  }
-
-  update(dt) {
-    this.x += this.vx * dt;
-    this.y += this.vy * dt;
-
-    this.vx *= 0.997;
-    this.vy *= 0.997;
-
-    const inGoalY =
-      this.y > H / 2 - GOAL.width / 2 && this.y < H / 2 + GOAL.width / 2;
-
-    // Murs verticaux hors buts
-    if (!inGoalY) {
-      if (this.x - this.r < FIELD.x) {
-        this.x = FIELD.x + this.r;
-        this.vx *= -0.9;
-        beep(220, 0.04, "sine", 0.03);
-      }
-      if (this.x + this.r > FIELD.x + FIELD.w) {
-        this.x = FIELD.x + FIELD.w - this.r;
-        this.vx *= -0.9;
-        beep(220, 0.04, "sine", 0.03);
-      }
-    }
-
-    if (this.y - this.r < FIELD.y) {
-      this.y = FIELD.y + this.r;
-      this.vy *= -0.9;
-      beep(220, 0.04, "sine", 0.03);
-    }
-    if (this.y + this.r > FIELD.y + FIELD.h) {
-      this.y = FIELD.y + FIELD.h - this.r;
-      this.vy *= -0.9;
-      beep(220, 0.04, "sine", 0.03);
-    }
-  }
-
-  draw() {
-    const grad = ctx.createRadialGradient(this.x - 5, this.y - 5, 3, this.x, this.y, this.r);
-    grad.addColorStop(0, "#fff");
-    grad.addColorStop(1, "#cbd5e1");
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.stroke();
+  draw(){
+    const p = project(this.x, 14, this.z);
+    const r = Math.max(5, this.r*p.s*0.12);
+    const g = ctx.createRadialGradient(p.x-r*0.4,p.y-r*0.4,2,p.x,p.y,r);
+    g.addColorStop(0,'#fff'); g.addColorStop(1,'#cbd5e1');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill();
   }
 }
 
-const car1 = new Car(FIELD.x + 120, H / 2, "#38bdf8", {
-  up: "z",
-  down: "s",
-  left: "q",
-  right: "d",
-  boost: "shift"
-});
+let player, ai, ball, blue=0, orange=0, mode='duel', timeLeft=60;
+function init(){
+  player = new Car(-240,0,'#38bdf8',false);
+  ai = new Car(240,0,'#f97316',true);
+  ai.a = Math.PI;
+  ball = new Ball();
+}
 
-const car2 = new Car(FIELD.x + FIELD.w - 120, H / 2, "#f97316", {
-  up: "arrowup",
-  down: "arrowdown",
-  left: "arrowleft",
-  right: "arrowright",
-  boost: "control"
-});
+function resetMatch(){ blue=0; orange=0; timeLeft=60; init(); updateHUD(); }
+modeEl.addEventListener('change', ()=>{ mode=modeEl.value; resetMatch(); });
+restartBtn.addEventListener('click', resetMatch);
 
-const ball = new Ball();
-
-let scoreLeft = 0;
-let scoreRight = 0;
-
-function resolveCarBall(car, ball) {
-  const dx = ball.x - car.x;
-  const dy = ball.y - car.y;
-  const dist = Math.hypot(dx, dy);
-  const minDist = car.r + ball.r;
-
-  if (dist < minDist && dist > 0.0001) {
-    const nx = dx / dist;
-    const ny = dy / dist;
-    const overlap = minDist - dist;
-
-    ball.x += nx * overlap;
-    ball.y += ny * overlap;
-
-    // impulsion liée vitesse voiture
-    const impact = (car.vx * nx + car.vy * ny);
-    ball.vx += nx * (impact * 1.15 + 130);
-    ball.vy += ny * (impact * 1.15 + 130);
-
-    beep(420, 0.05, "square", 0.04);
+function carBall(car){
+  const d = dist(car,ball), min = car.r+ball.r;
+  if(d<min){
+    const nx=(ball.x-car.x)/d, nz=(ball.z-car.z)/d, ov=min-d;
+    ball.x += nx*ov; ball.z += nz*ov;
+    const imp = car.vx*nx + car.vz*nz;
+    ball.vx += nx*(imp*1.1 + 170); ball.vz += nz*(imp*1.1 + 170);
   }
 }
 
-function checkGoal() {
-  const goalTop = H / 2 - GOAL.width / 2;
-  const goalBottom = H / 2 + GOAL.width / 2;
-
-  if (ball.y > goalTop && ball.y < goalBottom) {
-    // but gauche
-    if (ball.x < FIELD.x - GOAL.depth + 4) {
-      scoreRight++;
-      onGoal();
-    }
-    // but droite
-    if (ball.x > FIELD.x + FIELD.w + GOAL.depth - 4) {
-      scoreLeft++;
-      onGoal();
-    }
-  }
+function goals(){
+  const inGate = ball.z > -GOAL_W/2 && ball.z < GOAL_W/2;
+  if(inGate && ball.x < FIELD.x + 8){ orange++; afterGoal(); }
+  if(inGate && ball.x > FIELD.x + FIELD.w - 8){ blue++; afterGoal(); }
 }
+function afterGoal(){ player.x=-240; player.z=0; player.vx=player.vz=0; ai.x=240; ai.z=0; ai.vx=ai.vz=0; ball.reset(); updateHUD(); }
+function updateHUD(){ scoreEl.textContent = `Bleu ${blue} - ${orange} Orange`; }
 
-function onGoal() {
-  scoreEl.textContent = `${scoreLeft} - ${scoreRight}`;
-  beep(600, 0.08, "sawtooth", 0.05);
-  setTimeout(() => beep(750, 0.08, "sawtooth", 0.05), 90);
+function drawField(){
+  ctx.clearRect(0,0,W,H);
+  const corners = [
+    project(FIELD.x,0,FIELD.z), project(FIELD.x+FIELD.w,0,FIELD.z),
+    project(FIELD.x+FIELD.w,0,FIELD.z+FIELD.h), project(FIELD.x,0,FIELD.z+FIELD.h)
+  ];
+  ctx.fillStyle='#14532d';
+  ctx.beginPath(); ctx.moveTo(corners[0].x,corners[0].y);
+  for(let i=1;i<corners.length;i++) ctx.lineTo(corners[i].x,corners[i].y);
+  ctx.closePath(); ctx.fill();
 
-  car1.x = FIELD.x + 120; car1.y = H / 2; car1.vx = car1.vy = 0; car1.angle = 0;
-  car2.x = FIELD.x + FIELD.w - 120; car2.y = H / 2; car2.vx = car2.vy = 0; car2.angle = Math.PI;
-  ball.reset();
-}
-
-function drawField() {
-  // fond gazon "texturé"
-  ctx.fillStyle = "#166534";
-  ctx.fillRect(FIELD.x, FIELD.y, FIELD.w, FIELD.h);
-
-  // bandes
-  for (let i = 0; i < 12; i++) {
-    ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)";
-    ctx.fillRect(FIELD.x + (FIELD.w / 12) * i, FIELD.y, FIELD.w / 12, FIELD.h);
+  for(let i=0;i<10;i++){
+    const x0 = FIELD.x + i*(FIELD.w/10), x1=x0+FIELD.w/10;
+    const a=project(x0,0,FIELD.z), b=project(x1,0,FIELD.z), c=project(x1,0,FIELD.z+FIELD.h), d=project(x0,0,FIELD.z+FIELD.h);
+    ctx.fillStyle = i%2 ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.05)';
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.lineTo(c.x,c.y); ctx.lineTo(d.x,d.y); ctx.closePath(); ctx.fill();
   }
 
-  // ligne médiane + cercle central
-  ctx.strokeStyle = "rgba(255,255,255,0.65)";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(W / 2, FIELD.y);
-  ctx.lineTo(W / 2, FIELD.y + FIELD.h);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(W / 2, H / 2, 80, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // zones de but
-  ctx.strokeStyle = "rgba(255,255,255,0.55)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(FIELD.x - GOAL.depth, H / 2 - GOAL.width / 2, GOAL.depth, GOAL.width);
-  ctx.strokeRect(FIELD.x + FIELD.w, H / 2 - GOAL.width / 2, GOAL.depth, GOAL.width);
+  const m0=project(0,0,FIELD.z), m1=project(0,0,FIELD.z+FIELD.h);
+  ctx.strokeStyle='rgba(255,255,255,.7)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(m0.x,m0.y); ctx.lineTo(m1.x,m1.y); ctx.stroke();
 }
 
-let last = performance.now();
-function loop(now) {
-  const dt = Math.min((now - last) / 1000, 0.03);
-  last = now;
+let last=performance.now(); init();
+function loop(now){
+  const dt=Math.min((now-last)/1000,0.03); last=now;
+  if(mode==='time'){ timeLeft -= dt; if(timeLeft<=0){ timeLeft=0; } }
+  timerEl.textContent = mode==='time' ? `Temps: ${timeLeft.toFixed(1)}s` : '';
 
-  ctx.clearRect(0, 0, W, H);
+  const chaos = mode==='chaos';
+  if(!(mode==='time' && timeLeft<=0)){
+    player.control(dt, ball);
+    ai.control(dt, ball);
+    ball.update(dt, chaos);
+    carBall(player); carBall(ai);
+    goals();
+  }
+
   drawField();
-
-  car1.update(dt);
-  car2.update(dt);
-  ball.update(dt);
-
-  resolveCarBall(car1, ball);
-  resolveCarBall(car2, ball);
-
-  checkGoal();
-
-  ball.draw();
-  car1.draw();
-  car2.draw();
-
+  [ball, player, ai].sort((a,b)=>a.z-b.z).forEach(o=>o.draw());
   requestAnimationFrame(loop);
 }
-
-car2.angle = Math.PI;
 requestAnimationFrame(loop);
